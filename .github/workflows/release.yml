@@ -108,6 +108,12 @@ jobs:
           # Remove the self-referencing openclaw entry inside node_modules
           Remove-Item -Recurse -Force staging/openclaw/node_modules/openclaw
 
+      - name: Ad-hoc sign native modules (macOS only)
+        if: matrix.platform == 'darwin'
+        run: |
+          find staging/openclaw -name "*.node" | \
+            xargs -I {} codesign --force --sign - {}
+
       - name: Package tarball (unix)
         if: matrix.ext == 'tar.gz'
         run: |
