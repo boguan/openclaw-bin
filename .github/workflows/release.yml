@@ -131,11 +131,7 @@ jobs:
             -DestinationPath dist-pkg/${{ env.ASSET_NAME }}.zip
 
       - name: Upload release asset
-        run: |
-          gh release upload ${{ needs.create-release.outputs.tag }} \
-            dist-pkg/${{ env.ASSET_NAME }}.${{ matrix.ext }} \
-            --repo ${{ github.repository }} \
-            --clobber
+        run: gh release upload ${{ needs.create-release.outputs.tag }} dist-pkg/${{ env.ASSET_NAME }}.${{ matrix.ext }} --repo ${{ github.repository }} --clobber
 
   # ── 3. All platforms done → publish the release ──
   publish-release:
