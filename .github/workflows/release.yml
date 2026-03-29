@@ -16,21 +16,20 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create.outputs.upload_url }}
       tag: ${{ steps.tag.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Resolve tag
         id: tag
         run: echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
 
       - name: Create draft release
-        id: create
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: "openclaw ${{ steps.tag.outputs.tag }}"
-          draft: true
-          generate_release_notes: false
+        run: |
+          gh release create v${{ inputs.version }} \
+            --repo ${{ github.repository }} \
+            --title "openclaw v${{ inputs.version }}" \
+            --draft
 
   # ── 2. Build on each platform in parallel ──
   build:
@@ -42,28 +41,25 @@ jobs:
           - os: macos-26            # Apple Silicon (arm64)
             platform: darwin
             arch: arm64
-            archive_cmd: tar -czf
             ext: tar.gz
-          - os: macos-26-intel    # Intel (x64)
+          - os: macos-26-intel      # Intel (x64)
             platform: darwin
             arch: x64
-            archive_cmd: tar -czf
             ext: tar.gz
           - os: ubuntu-24.04
             platform: linux
             arch: x64
-            archive_cmd: tar -czf
             ext: tar.gz
           - os: windows-2025
             platform: win32
             arch: x64
-            archive_cmd: "7z a -tzip"
             ext: zip
 
     runs-on: ${{ matrix.os }}
 
     env:
       ASSET_NAME: openclaw-${{ inputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Set up Node.js 22
@@ -93,18 +89,20 @@ jobs:
             -DestinationPath dist-pkg/${{ env.ASSET_NAME }}.zip
 
       - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.tag }}
-          files: dist-pkg/${{ env.ASSET_NAME }}.${{ matrix.ext }}
+        run: |
+          gh release upload ${{ needs.create-release.outputs.tag }} \
+            dist-pkg/${{ env.ASSET_NAME }}.${{ matrix.ext }} \
+            --repo ${{ github.repository }}
 
   # ── 3. All platforms done → publish the release ──
   publish-release:
     needs: [create-release, build]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.tag }}
-          draft: false
+        run: |
+          gh release edit ${{ needs.create-release.outputs.tag }} \
+            --repo ${{ github.repository }} \
+            --draft=false
