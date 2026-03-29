@@ -67,25 +67,61 @@ jobs:
         with:
           node-version: "22"
 
-      # npm install compiles native modules against the runner's Node.js 22
+      # npm install compiles native modules against the runner's Node.js 22.
+      # After install:
+      #   node_modules/openclaw/openclaw.mjs   ← entry point
+      #   node_modules/openclaw/dist/
+      #   node_modules/openclaw/assets/
+      #   node_modules/openclaw/skills/
+      #   node_modules/<dep>/                  ← all deps incl. native .node files
       - name: Install openclaw ${{ inputs.version }}
         run: npm install openclaw@${{ inputs.version }}
 
-      # The installed package lands in node_modules/openclaw.
-      # We package the entire node_modules/openclaw directory.
+      # Assemble staging dir with a clean layout:
+      #   openclaw/
+      #     openclaw.mjs      ← entry point at top level
+      #     dist/
+      #     assets/
+      #     skills/
+      #     node_modules/     ← all deps
+      - name: Assemble staging directory (unix)
+        if: matrix.ext == 'tar.gz'
+        run: |
+          mkdir -p staging/openclaw
+          # Hoist openclaw package contents to top level
+          cp -r node_modules/openclaw/. staging/openclaw/
+          # Remove the self-referencing openclaw entry inside node_modules
+          rm -rf staging/openclaw/node_modules/openclaw
+          # Move all deps into staging/openclaw/node_modules
+          cp -r node_modules/. staging/openclaw/node_modules/
+          rm -rf staging/openclaw/node_modules/openclaw
+
+      - name: Assemble staging directory (windows)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging/openclaw | Out-Null
+          # Hoist openclaw package contents to top level
+          Copy-Item -Recurse node_modules/openclaw/* staging/openclaw/
+          # Move all deps into staging/openclaw/node_modules
+          Copy-Item -Recurse node_modules staging/openclaw/node_modules
+          # Remove the self-referencing openclaw entry inside node_modules
+          Remove-Item -Recurse -Force staging/openclaw/node_modules/openclaw
+
       - name: Package tarball (unix)
         if: matrix.ext == 'tar.gz'
         run: |
           mkdir -p dist-pkg
           tar -czf dist-pkg/${{ env.ASSET_NAME }}.tar.gz \
-            -C node_modules openclaw
+            -C staging openclaw
 
       - name: Package zip (windows)
         if: matrix.ext == 'zip'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist-pkg | Out-Null
-          Compress-Archive -Path node_modules/openclaw `
+          Compress-Archive \
+            -Path staging/openclaw \
             -DestinationPath dist-pkg/${{ env.ASSET_NAME }}.zip
 
       - name: Upload release asset
