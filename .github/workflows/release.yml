@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -128,7 +128,8 @@ jobs:
         run: |
           gh release upload ${{ needs.create-release.outputs.tag }} \
             dist-pkg/${{ env.ASSET_NAME }}.${{ matrix.ext }} \
-            --repo ${{ github.repository }}
+            --repo ${{ github.repository }} \
+            --clobber
 
   # ── 3. All platforms done → publish the release ──
   publish-release:
