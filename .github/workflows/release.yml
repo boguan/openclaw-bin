@@ -126,8 +126,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist-pkg | Out-Null
-          Compress-Archive \
-            -Path staging/openclaw \
+          Compress-Archive `
+            -Path staging/openclaw `
             -DestinationPath dist-pkg/${{ env.ASSET_NAME }}.zip
 
       - name: Upload release asset
