@@ -49,6 +49,26 @@ From the [AgentHow](https://github.com/boguan/AgentHow) repo:
 pnpm release:runtime
 ```
 
+## macOS Gatekeeper
+
+macOS applies a quarantine extended attribute (`com.apple.quarantine`) to files downloaded from the internet. This causes Gatekeeper to block un-notarized native `.node` files (e.g. `clipboard.darwin-universal.node`) with an "Apple could not verify … is free of malware" warning.
+
+The CI build already ad-hoc signs all `.node` files (`codesign --force --sign -`), but ad-hoc signatures alone do not pass the quarantine check. After downloading and extracting, you need to remove the quarantine attribute:
+
+```bash
+xattr -rd com.apple.quarantine ./openclaw
+```
+
+If your application downloads the tarball automatically (e.g. in Electron), remove the attribute programmatically after extraction:
+
+```typescript
+import { execSync } from 'child_process';
+
+if (process.platform === 'darwin') {
+  execSync(`xattr -rd com.apple.quarantine "${installDir}"`, { stdio: 'ignore' });
+}
+```
+
 ## Compatibility
 
 - Native modules are compiled against Node.js 22 during the CI build. Verify compatibility with your target runtime (e.g. Electron's embedded Node.js) before shipping.
