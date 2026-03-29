@@ -1,0 +1,138 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'openclaw version (e.g. 2026.3.28)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+          - os: macos-13
+            platform: darwin
+            arch: x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install openclaw from npm
+        shell: bash
+        run: |
+          mkdir -p build
+          cd build
+          npm init -y
+          npm install openclaw@${{ inputs.version }}
+
+      - name: Assemble tarball contents
+        shell: bash
+        run: |
+          PKG="openclaw-pkg"
+          mkdir -p "$PKG/node_modules"
+
+          # openclaw 包本体
+          cp -r build/node_modules/openclaw/* "$PKG/"
+
+          # 所有依赖（普通包 + scoped 包）
+          for dir in build/node_modules/*/; do
+            name=$(basename "$dir")
+            [ "$name" = "openclaw" ] && continue
+            [ "$name" = ".package-lock.json" ] && continue
+            cp -r "$dir" "$PKG/node_modules/"
+          done
+          for scope_dir in build/node_modules/@*/; do
+            scope=$(basename "$scope_dir")
+            [ "$scope" = "@*" ] && continue
+            mkdir -p "$PKG/node_modules/$scope"
+            for dir in "$scope_dir"*/; do
+              cp -r "$dir" "$PKG/node_modules/$scope/"
+            done
+          done
+
+          # 验证
+          [ -f "$PKG/openclaw.mjs" ] || { echo "ERROR: openclaw.mjs missing"; exit 1; }
+
+          # 清理减小体积
+          find "$PKG" -name '*.md' -delete 2>/dev/null || true
+          find "$PKG" -name '*.map' -delete 2>/dev/null || true
+          find "$PKG" -name 'LICENSE*' -delete 2>/dev/null || true
+          find "$PKG" -name 'CHANGELOG*' -delete 2>/dev/null || true
+          rm -rf "$PKG/docs" 2>/dev/null || true
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          cd openclaw-pkg
+          node openclaw.mjs --version || echo "version check done"
+
+      - name: Create tarball
+        shell: bash
+        run: |
+          TARBALL="openclaw-${{ inputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+          tar -czf "$TARBALL" -C openclaw-pkg .
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+          ls -lh "$TARBALL"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openclaw-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ env.TARBALL }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ inputs.version }}"
+          TARBALLS=$(find artifacts -type f -name '*.tar.gz')
+
+          # 列出所有 tarball 及大小
+          for f in $TARBALLS; do ls -lh "$f"; done
+
+          # 创建 release
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "openclaw ${{ inputs.version }}" \
+              --notes "Pre-built openclaw v${{ inputs.version }} tarballs.
+
+          | Platform | Arch | Download |
+          |----------|------|----------|
+          | macOS | arm64 | \`openclaw-${{ inputs.version }}-darwin-arm64.tar.gz\` |
+          | macOS | x64 | \`openclaw-${{ inputs.version }}-darwin-x64.tar.gz\` |
+          | Linux | x64 | \`openclaw-${{ inputs.version }}-linux-x64.tar.gz\` |
+          | Windows | x64 | \`openclaw-${{ inputs.version }}-win32-x64.tar.gz\` |"
+          fi
+
+          # 上传
+          for f in $TARBALLS; do
+            gh release upload "$TAG" "$f" --repo "${{ github.repository }}" --clobber
+          done

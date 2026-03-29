@@ -35,19 +35,24 @@ node openclaw/openclaw.mjs gateway --port 18789
 
 ## Building a new release
 
-Tarballs are built from the official npm package. The build script lives in the consumer project (e.g. [AgentHow](https://github.com/boguan/AgentHow)):
+### GitHub Actions (all platforms)
+
+Go to **Actions > Build and Release > Run workflow**, enter the openclaw version (e.g. `2026.3.28`).
+
+The workflow spins up 4 runners (macOS arm64, macOS x64, Linux x64, Windows x64), runs `npm install openclaw@{version}` on each to compile native modules natively, packages tarballs, and uploads them to a GitHub Release.
+
+### Local (current platform only)
+
+From the [AgentHow](https://github.com/boguan/AgentHow) repo:
 
 ```bash
-# In the AgentHow repo
 pnpm release:runtime
 ```
 
-This reads the version from `openclaw/package.json`, packages the directory, and uploads to this repo's GitHub Releases.
-
 ## Compatibility
 
-- Native modules are compiled for the Node.js version used during `npm install`. Verify compatibility with your target runtime (e.g. Electron's embedded Node.js) before shipping.
-- Tarballs are platform and architecture specific. Cross-platform distribution requires separate tarballs for each target.
+- Native modules are compiled against Node.js 22 during the CI build. Verify compatibility with your target runtime (e.g. Electron's embedded Node.js) before shipping.
+- Each tarball is platform and architecture specific.
 
 ## License
 
